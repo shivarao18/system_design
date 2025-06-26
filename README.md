@@ -178,3 +178,76 @@ Used when the server needs to push data to the client without waiting for a requ
     * **How it works:** Starts with an HTTP "Upgrade" request and keeps the TCP connection alive for full-duplex communication.
     * **Strength:** Very low latency, efficient, ideal for "live" features.
     * **Use Cases:** Chat applications, live stock tickers, collaborative editing tools, real-time notifications.
+ 
+# System Design: Module 2.3 - Messaging and Queuing Systems
+
+This section covers asynchronous communication between services using message queues, a pattern crucial for building scalable and resilient applications.
+
+---
+
+## 1. Synchronous vs. Asynchronous
+
+* **Synchronous:** The client makes a request and is **blocked**, waiting for the server to finish its work and send a response. (e.g., a phone call).
+* **Asynchronous:** The client sends a message to a service and can **immediately move on** to other tasks. It trusts the message will be processed eventually. (e.g., sending a text message).
+
+## 2. What is a Message Queue?
+
+A message queue is a reliable intermediary component (a buffer) that allows services to communicate asynchronously.
+
+* **Producer (Publisher):** A service that writes a message (describing a task) to the queue.
+* **Message Queue (Broker):** The "post office" that reliably stores the message until it's processed.
+* **Consumer (Subscriber):** A service that reads messages from the queue and performs the specified task.
+
+![Message Queue Diagram](https://i.imgur.com/gBw1gN1.png)
+
+## 3. Key Benefits
+
+* **Decoupling & Resilience:** The producer and consumer services are independent. If the consumer service fails, the messages are held safely in the queue, preventing data loss. The producer doesn't even need to know if the consumer is online.
+* **Improved Responsiveness:** User-facing services can offload slow tasks to a queue in milliseconds and provide an immediate response to the user, making the application feel fast. The heavy work happens in the background.
+* **Load Leveling / Buffering:** A queue can absorb sudden spikes in traffic (e.g., from a flash sale), preventing consumer services from being overwhelmed. The consumers can process the backlog at their own steady pace.
+
+## 4. Common Patterns & Use Cases
+
+* **Use Cases:** E-commerce order processing, video encoding, sending bulk emails, ingesting large volumes of log data.
+* **Parallel Processing ("Fan-Out"):** A single event message is delivered to multiple queues so several distinct services can work on the task in parallel.
+* **Sequential Processing ("Chaining"):** One service consumes a message, performs a task, and then produces a new message for the next service in the workflow, creating a reliable, multi-step process.
+* **Technologies:** `RabbitMQ`, `Amazon SQS`, `Apache Kafka`.
+
+# System Design: Module 2.4 - The CAP Theorem
+
+This section covers the CAP Theorem, a fundamental principle that describes the trade-offs inherent in any distributed data store.
+
+---
+
+## 1. The Three Guarantees
+
+The CAP Theorem states that a distributed system can only simultaneously guarantee **two** of the following three properties:
+
+* **C - Consistency (Strong):** Every read request receives the most recent write or an error. All nodes in the system see the exact same data at the same time.
+
+* **A - Availability:** Every request receives a (non-error) response, without the guarantee that it contains the most recent write. The system is always online and responsive.
+
+* **P - Partition Tolerance:** The system continues to operate despite a network partition (i.e., dropped or delayed messages between nodes).
+
+## 2. The Core Trade-off
+
+For any real-world distributed system, network partitions **are a fact of life**. Therefore, **Partition Tolerance (P) is mandatory**.
+
+This forces a choice between the remaining two guarantees: when a network partition happens, a system must choose to sacrifice either Consistency or Availability.
+
+## 3. The Two System Types
+
+* ### CP (Consistent & Partition-Tolerant)
+    * **Choice:** When a partition occurs, the system chooses **Consistency** over Availability.
+    * **Behavior:** To avoid returning stale data, some nodes may become unavailable. They might stop responding or return an error until the partition heals and consistency can be guaranteed.
+    * **Use Cases:** Systems where correctness is paramount.
+    * **Examples:** Financial systems, inventory management, relational databases.
+
+* ### AP (Available & Partition-Tolerant)
+    * **Choice:** When a partition occurs, the system chooses **Availability** over Consistency.
+    * **Behavior:** All nodes remain online and respond to requests, even if it means returning stale data. The system relies on **eventual consistency** to sync up after the partition heals.
+    * **Use Cases:** Systems where being online is more critical than having perfectly up-to-date data.
+    * **Examples:** Social media feeds, product reviews, NoSQL databases like Cassandra.
+
+
+
