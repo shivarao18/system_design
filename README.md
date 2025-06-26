@@ -72,3 +72,61 @@ Ensures that all clients see the same data at the same time, especially when dat
     * **Analogy:** A social media "like" count. It's acceptable if it takes a few seconds to be visible to everyone globally.
     * **Trade-off:** Lower latency and higher availability, but more complex for developers to handle stale data.
     * **Use Case:** Social media feeds, view counts, user profile updates—anywhere a slight delay is acceptable.
+ 
+# System Design: Module 2.1 - Data Storage (SQL vs. NoSQL)
+
+This section covers the fundamental choice of data storage, breaking down the differences between relational (SQL) and non-relational (NoSQL) databases.
+
+---
+
+## 1. SQL (Relational Databases)
+
+Relational databases store data in a highly structured format using tables with rows and columns. They rely on a predefined schema and are known for reliability.
+
+* **Analogy:** A well-organized library card catalog or an Excel spreadsheet.
+* **Schema:** **Predefined Schema (Schema-on-Write)**. The table structure (columns, data types) must be defined before data is inserted.
+* **Key Guarantee (ACID):** This is the main reason to choose SQL for critical systems.
+    * **A**tomicity: All parts of a transaction succeed, or the entire transaction is rolled back.
+    * **C**onsistency: Data is always in a valid state.
+    * **I**solation: Concurrent transactions don't interfere with each other.
+    * **D**urability: Once saved, data is permanent, even after a system crash.
+* **Scaling:** Traditionally scaled **vertically** (by increasing server power).
+* **Examples:** `MySQL`, `PostgreSQL`, `Microsoft SQL Server`.
+* **Use When:** You have structured data, a stable schema, and require absolute transactional integrity (e.g., financial systems, e-commerce orders, inventory).
+
+---
+
+## 2. NoSQL (Non-Relational Databases)
+
+NoSQL is an umbrella term for databases that do not use the traditional relational model. They are prized for their flexibility and horizontal scalability.
+
+* **Analogy:** A folder that can hold any type of file (Word docs, PDFs, images).
+* **Schema:** **Dynamic Schema (Schema-on-Read)**. The structure is flexible and can vary from entry to entry.
+* **Key Principle (BASE):** Prioritizes availability and scale over strict consistency.
+    * **B**asically **A**vailable
+    * **S**oft state
+    * **E**ventually consistent
+* **Scaling:** Designed to scale **horizontally** (by adding more servers).
+
+### Types of NoSQL Databases
+
+| Database Type      | Data Model                               | Primary Strength                        | Use Case Example                        |
+| :----------------- | :--------------------------------------- | :-------------------------------------- | :-------------------------------------- |
+| **Document** | JSON-like Documents                      | Flexible schema, intuitive for developers | Blog posts, product catalogs            |
+| **Key-Value** | `(Key, Value)` pairs                     | Extreme speed for simple lookups        | Caching (Redis), user sessions          |
+| **Column-Family** | Rows with varied, grouped columns        | Massive write throughput, analytics     | Logging, time-series data (Cassandra)   |
+| **Graph** | Nodes (entities) and Edges (relationships) | Traversing complex relationships        | Social networks, fraud detection (Neo4j)|
+
+### Detailed Breakdown:
+
+* **Document Databases (e.g., MongoDB):**
+    * Stores data in self-contained documents (like JSON). All data for an object (e.g., a blog post and its comments) can be in one document, making reads fast. Great general-purpose NoSQL DB.
+
+* **Key-Value Stores (e.g., Redis):**
+    * The simplest model. A unique key maps to a value. Incredibly fast (`O(1)` lookup) but you can only query by the key. Perfect for caching.
+
+* **Column-Family Stores (e.g., Cassandra):**
+    * Stores data in columns rather than rows. Optimized for fast writes and analytical queries that aggregate data from specific columns over millions of rows. Ideal for logging and time-series data.
+
+* **Graph Databases (e.g., Neo4j):**
+    * Purpose-built to store and traverse relationships. The connections between data are as important as the data itself. Avoids slow, recursive `JOINs` needed in SQL for similar tasks.
