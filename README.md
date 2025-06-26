@@ -130,3 +130,51 @@ NoSQL is an umbrella term for databases that do not use the traditional relation
 
 * **Graph Databases (e.g., Neo4j):**
     * Purpose-built to store and traverse relationships. The connections between data are as important as the data itself. Avoids slow, recursive `JOINs` needed in SQL for similar tasks.
+
+
+# System Design: Module 2.2 - Communication Protocols & APIs
+
+This section covers the primary methods and architectural styles that services use to communicate with each other and with clients.
+
+---
+
+## 1. REST (REpresentational State Transfer)
+
+A set of architectural principles for designing networked applications, using the standard HTTP protocol. It is the most common style for web APIs.
+
+* **Analogy:** Ordering a specific combo meal from a restaurant menu. The options are fixed.
+* **Architecture:** Client-server model where clients interact with **Resources** via unique URLs (endpoints).
+* **Core Components:**
+    * **Endpoint (URL):** The address of a resource (e.g., `/users/123`).
+    * **HTTP Method:** The action to be performed.
+        * `GET`: Read a resource.
+        * `POST`: Create a new resource.
+        * `PUT`/`PATCH`: Update an existing resource.
+        * `DELETE`: Remove a resource.
+    * **Headers:** Metadata about the request (e.g., `Authorization`, `Content-Type`).
+    * **Body:** The data payload for `POST` or `PUT` requests (usually JSON).
+* **Strength:** Standardized, stateless, and leverages the existing web infrastructure.
+* **Weakness:** Can lead to **over-fetching** (getting more data than needed) or **under-fetching** (needing multiple requests to get all required data).
+
+## 2. GraphQL
+
+A query language for APIs that allows clients to request exactly the data they need.
+
+* **Analogy:** A buffet where you pick exactly which items you want on your plate.
+* **Architecture:** Typically uses a single endpoint (e.g., `/graphql`). The client sends a `POST` request with a query detailing its data requirements.
+* **Core Concepts:**
+    * **Schema:** A strong type system defined on the server that describes all available data.
+    * **Query:** Sent by the client to read data. The response JSON mirrors the query structure.
+    * **Mutation:** Sent by the client to write (create, update, delete) data.
+* **Strength:** Solves over/under-fetching, reducing the number of network round trips. Highly efficient for complex views and mobile clients.
+
+## 3. Real-Time Communication & WebSockets
+
+Used when the server needs to push data to the client without waiting for a request.
+
+* **Polling (The Old Way):** The client repeatedly asks the server "is there anything new?" Inefficient.
+* **WebSockets (The Modern Way):** Establishes a persistent, stateful, two-way communication channel between the client and server.
+    * **Analogy:** An open phone line versus sending letters back and forth.
+    * **How it works:** Starts with an HTTP "Upgrade" request and keeps the TCP connection alive for full-duplex communication.
+    * **Strength:** Very low latency, efficient, ideal for "live" features.
+    * **Use Cases:** Chat applications, live stock tickers, collaborative editing tools, real-time notifications.
