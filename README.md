@@ -249,5 +249,124 @@ This forces a choice between the remaining two guarantees: when a network partit
     * **Use Cases:** Systems where being online is more critical than having perfectly up-to-date data.
     * **Examples:** Social media feeds, product reviews, NoSQL databases like Cassandra.
 
+# System Design Case Study: A URL Shortener (like TinyURL)
 
+This document walks through the process of designing a URL shortening service, following a standard 5-step system design interview framework.
+
+---
+
+## The Problem
+
+Design a service like TinyURL. At its core, this service must do two things:
+1.  **Shorten:** Accept a long URL and return a much shorter, unique URL.
+2.  **Redirect:** Accept a short URL and redirect the user to the original long URL.
+
+---
+
+### Step 1: Requirements & Scope Clarification
+
+First, we must understand the exact requirements. After asking clarifying questions, we've agreed on the following scope for our system.
+
+#### Functional Requirements:
+* Users can input a long URL and receive a short URL.
+* Users who visit a short URL are redirected to the original long URL.
+* The creation process must be synchronous and feel fast to the user.
+* Analytics (like click tracking) are out of scope for this initial design.
+
+#### Non-Functional Requirements:
+* **Traffic (Writes):** The system will handle **100 million** new URL creations per month.
+* **Traffic (Reads):** The system will have a **10:1** read-to-write ratio.
+* **Availability:** The redirection service must be **highly available**. Broken links are unacceptable.
+* **Latency:** The redirection must happen with **very low latency**.
+
+---
+
+### Step 2: Back-of-the-Envelope Estimation
+
+Based on the requirements, we can estimate the load and storage needs to guide our design.
+
+* **Write Rate (Requests Per Second):**
+    * `100,000,000 writes / (30 days * 24 hours * 3600 seconds)` ≈ **40 writes/sec**
+
+* **Read Rate (Requests Per Second):**
+    * Based on the 10:1 ratio: `40 writes/sec * 10` = **400 reads/sec**
+    * **Key Insight:** The system is **read-heavy**. The read path (redirection) must be highly optimized.
+
+* **Storage (for 5 years):**
+    1.  **Total Records:** `100M URLs/month * 12 months/year * 5 years` = **6 Billion URLs**.
+    2.  **Size per Record:**
+        * `long_url`: Assume a generous average of **500 bytes**.
+        * `short_alias`: We need a unique key for 6 billion items. Using Base62 (`a-z, A-Z, 0-9`), 7 characters gives us `62^7` ≈ 3.5 trillion unique combinations, which is more than enough. So, **7 bytes**.
+        * Other metadata (`UserID`, `CreationDate`, etc.): ~**13 bytes**.
+        * **Total per record:** `500 + 7 + 13` ≈ **520 bytes**.
+    3.  **Total Storage:** `6 Billion records * 520 bytes/record` ≈ **3.12 TB**.
+
+---
+
+### Step 3: High-Level Design (HLD)
+
+The architecture is split into a **Write Path** and a **Read Path** to optimize for our read-heavy workload.
+
+!https://medium.com/@sandeep4.verma/system-design-scalable-url-shortener-service-like-tinyurl-106f30f23a82(https://i.imgur.com/uGZ8w2a.png)
+
+#### Write Path (URL Shortening)
+* **Flow:** `Client -> POST Request -> Load Balancer -> Web Server -> Primary Database`
+* **Process:**
+    1.  A user sends a `POST` request with the long URL.
+    2.  The web server generates a unique short alias.
+    3.  It writes the `(short_alias, long_url)` pair to the **Primary Database**. All writes go here to maintain a single source of truth.
+    4.  The server returns the new short URL to the user.
+
+#### Read Path (URL Redirection)
+* **Flow:** `Client -> GET Request -> Load Balancer -> Web Server -> Cache -> Read Replica Database`
+* **Process:**
+    1.  A user clicks a short link, sending a `GET` request.
+    2.  The web server first checks a **Cache** (e.g., Redis) using the short alias as the key.
+    3.  **If Cache Hit:** The long URL is found in the cache. This is the fastest path and will serve the majority of requests.
+    4.  **If Cache Miss:** The server queries a **Read Replica Database** to find the long URL. It then stores the result in the cache for future requests.
+    5.  The server issues a `301 Permanent Redirect` to the user's browser.
+
+#### Database Model: Primary-Replica
+To handle the read-heavy load and provide high availability, we use a primary-replica setup.
+* The **Primary** DB handles all writes.
+* The Primary automatically copies data (**replication**) to multiple **Read Replicas**.
+* The high volume of read requests is distributed across the replicas, preventing the Primary from getting overloaded.
+* If the Primary fails, a replica can be promoted to become the new Primary, ensuring high availability.
+
+---
+
+### Step 4: Deep Dive - Alias Generation Strategy
+
+The core logic is creating a unique 7-character alias. We considered two approaches.
+
+1.  **Hashing (Initial Idea):**
+    * **Method:** Hash the long URL (e.g., with SHA-256) and truncate the result to 7 characters.
+    * **Problem:** At a scale of billions, truncating hashes leads to a very high rate of **collisions**. The logic to check for and handle these collisions (by re-hashing) would be complex and slow down the write process.
+
+2.  **Counter + Base-62 Conversion (Chosen Design):**
+    * **Method:** This approach guarantees uniqueness.
+        1.  Use the database's auto-incrementing `ID` feature. Each new URL gets a unique integer (e.g., 1, 2, ..., 6,000,000,000).
+        2.  Take that unique integer ID and convert it from Base-10 to **Base-62** (`a-z, A-Z, 0-9`). This gives us our short, non-colliding alias.
+    * **Example:** ID `6000000000` becomes `6mZeWq` in Base-62.
+    * **Result:** This method is faster, simpler, and guarantees a unique alias every time.
+
+---
+
+### Step 5: Identifying Bottlenecks and Scaling
+
+As the system grows to handle 10x or 100x traffic, we must address bottlenecks.
+
+* **Primary Bottleneck:** The database. A single server (even with replicas) cannot store tens of terabytes of data or handle millions of requests per second efficiently.
+
+* **Solution: Database Sharding (Partitioning):**
+    * **Concept:** We break our massive database into smaller, independent databases called **shards**.
+    * **Strategy:** We can use **Range-Based Sharding**. The sharding key is our unique numeric `ID`.
+        * **Shard 1:** Stores IDs 1 to 1 Billion.
+        * **Shard 2:** Stores IDs 1B+1 to 2 Billion.
+        * ...and so on.
+    * **Benefit:** This distributes the data and the read/write traffic across many servers, allowing for near-infinite horizontal scaling. An application layer service is needed to route requests to the correct shard.
+
+* **Handling "Hotspots":**
+    * **Problem:** What if one URL goes viral? Its shard will get overwhelmed with traffic.
+    * **Solution:** The **caching layer** is our primary defense. A viral link will be served almost entirely from the cache, protecting the database. We must ensure our cache is robust and scalable.
 
